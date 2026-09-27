@@ -1,0 +1,15 @@
+<header class="topbar">
+  <span class="brand">Incident Monitoring</span>
+  <nav class="nav" aria-label="Main">
+    <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Dashboard</a>
+    <a routerLink="/events" routerLinkActive="active">Events</a>
+    <a routerLink="/services" routerLinkActive="active">Service Status</a>
+  </nav>
+  <span [class]="'connection conn-' + realtime.state()" role="status">
+    {{ connectionLabels[realtime.state()] }}
+  </span>
+</header>
+
+<main class="page">
+  <router-outlet />
+</main>

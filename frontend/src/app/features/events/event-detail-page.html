@@ -1,0 +1,56 @@
+<p><a routerLink="/events">← Back to events</a></p>
+
+@if (loadError(); as message) {
+  <p class="notice notice-error" role="alert">{{ message }}</p>
+} @else if (!event()) {
+  <p class="muted">Loading event…</p>
+}
+
+@if (event(); as e) {
+  <div class="page-header">
+    <h1 class="mono">{{ e.eventId }}</h1>
+    <span [class]="'badge st-' + (e.status | lowercase)">{{ e.status }}</span>
+  </div>
+
+  <section class="panel">
+    <dl class="details">
+      <dt>Source</dt>
+      <dd>{{ e.source }}</dd>
+      <dt>Service</dt>
+      <dd>{{ e.service }}</dd>
+      <dt>Severity</dt>
+      <dd><span [class]="'badge sev-' + (e.severity | lowercase)">{{ e.severity }}</span></dd>
+      <dt>Message</dt>
+      <dd>{{ e.message }}</dd>
+      <dt>Event time</dt>
+      <dd [title]="e.timestamp">{{ e.timestamp | date: 'yyyy-MM-dd HH:mm:ss.SSS' }}</dd>
+      <dt>Received at</dt>
+      <dd [title]="e.receivedAt">{{ e.receivedAt | date: 'yyyy-MM-dd HH:mm:ss.SSS' }}</dd>
+      <dt>Status</dt>
+      <dd>{{ e.status }}</dd>
+      <dt>Status updated</dt>
+      <dd [title]="e.statusUpdatedAt ?? ''">
+        {{ e.statusUpdatedAt ? (e.statusUpdatedAt | date: 'yyyy-MM-dd HH:mm:ss.SSS') : 'Not changed since it was received' }}
+      </dd>
+    </dl>
+  </section>
+
+  <section class="panel">
+    <h2>Change status</h2>
+    <div class="actions">
+      @for (status of transitions(); track status) {
+        <button type="button" [disabled]="saving()" (click)="changeStatus(status)">
+          {{ transitionLabels[status] }}
+        </button>
+      }
+    </div>
+    <div aria-live="polite">
+      @if (actionMessage(); as message) {
+        <p class="notice notice-success">{{ message }}</p>
+      }
+      @if (actionError(); as message) {
+        <p class="notice notice-error" role="alert">{{ message }}</p>
+      }
+    </div>
+  </section>
+}

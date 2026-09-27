@@ -1,0 +1,93 @@
+<div class="page-header">
+  <h1>Dashboard</h1>
+  @if (summary()?.snapshotAt; as snapshotAt) {
+    <span class="muted">Last updated {{ snapshotAt | date: 'HH:mm:ss' }}</span>
+  }
+</div>
+
+@if (summaryError(); as error) {
+  <p class="notice notice-warning" role="alert">{{ error }}</p>
+} @else if (!summary()) {
+  <p class="muted">Loading dashboard…</p>
+}
+
+@if (summary(); as s) {
+  <section class="metrics" aria-label="Key figures">
+    <div class="metric">
+      <span class="metric-label">Total events</span>
+      <span class="metric-value">{{ s.totalEvents }}</span>
+      <span class="metric-hint">All events received</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">Open events</span>
+      <span class="metric-value">{{ s.openEvents }}</span>
+      <span class="metric-hint">Status OPEN, not yet acknowledged</span>
+    </div>
+    <div class="metric metric-critical">
+      <span class="metric-label">Critical events</span>
+      <span class="metric-value">{{ s.criticalEvents }}</span>
+      <span class="metric-hint">CRITICAL and not resolved</span>
+    </div>
+  </section>
+
+  <div class="columns">
+    <section class="panel">
+      <h2>Service health</h2>
+      <app-service-health-table [services]="s.services" />
+    </section>
+
+    <section class="panel">
+      <h2>Severity distribution</h2>
+      <ul class="bars" aria-label="Events per severity">
+        @for (severity of severities; track severity) {
+          <li class="bar-row">
+            <span class="bar-label">{{ severity }}</span>
+            <span class="bar-track">
+              <span [class]="'bar-fill sev-' + (severity | lowercase)" [style.width.%]="severityBarWidth(severity)"></span>
+            </span>
+            <span class="bar-value">{{ severityCount(severity) }}</span>
+          </li>
+        }
+      </ul>
+    </section>
+  </div>
+}
+
+<section class="panel">
+  <h2>Recent events</h2>
+  @if (recentError(); as error) {
+    <p class="notice notice-warning" role="alert">{{ error }}</p>
+  } @else if (recent() === null) {
+    <p class="muted">Loading recent events…</p>
+  } @else {
+    <div class="table-wrap">
+      <table>
+        <caption class="visually-hidden">Recent events</caption>
+        <thead>
+          <tr>
+            <th scope="col">Event time</th>
+            <th scope="col">Source</th>
+            <th scope="col">Service</th>
+            <th scope="col">Severity</th>
+            <th scope="col">Status</th>
+            <th scope="col">Message</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (event of recent(); track event.eventId) {
+            <tr class="clickable" tabindex="0" (click)="openEvent(event)" (keydown.enter)="openEvent(event)">
+              <td class="nowrap">{{ event.timestamp | date: 'yyyy-MM-dd HH:mm:ss' }}</td>
+              <td>{{ event.source }}</td>
+              <td>{{ event.service }}</td>
+              <td><span [class]="'badge sev-' + (event.severity | lowercase)">{{ event.severity }}</span></td>
+              <td><span [class]="'badge st-' + (event.status | lowercase)">{{ event.status }}</span></td>
+              <td>{{ event.message }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6" class="empty">No events yet.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

@@ -1,0 +1,94 @@
+<div class="page-header">
+  <h1>Events</h1>
+  @if (result(); as r) {
+    <span class="muted">{{ r.totalCount }} events</span>
+  }
+</div>
+
+<form class="filters" [formGroup]="filters" (submit)="$event.preventDefault()">
+  <label>
+    Severity
+    <select formControlName="severity">
+      <option value="">All</option>
+      @for (value of facets()?.severities; track value) {
+        <option [value]="value">{{ value }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    Status
+    <select formControlName="status">
+      <option value="">All</option>
+      @for (value of facets()?.statuses; track value) {
+        <option [value]="value">{{ value }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    Source
+    <select formControlName="source">
+      <option value="">All</option>
+      @for (value of facets()?.sources; track value) {
+        <option [value]="value">{{ value }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    Service
+    <select formControlName="service">
+      <option value="">All</option>
+      @for (value of facets()?.services; track value) {
+        <option [value]="value">{{ value }}</option>
+      }
+    </select>
+  </label>
+  <label class="search">
+    Search
+    <input type="search" formControlName="search" placeholder="Event ID, message or service" />
+  </label>
+  <button type="button" class="secondary" (click)="clearFilters()">Clear</button>
+</form>
+
+@if (error(); as message) {
+  <p class="notice notice-error" role="alert">{{ message }}</p>
+}
+
+<div class="table-wrap" [class.is-loading]="loading()">
+  <table>
+    <caption class="visually-hidden">Events</caption>
+    <thead>
+      <tr>
+        <th scope="col">Event ID</th>
+        <th scope="col">Event time</th>
+        <th scope="col">Source</th>
+        <th scope="col">Service</th>
+        <th scope="col">Severity</th>
+        <th scope="col">Status</th>
+        <th scope="col">Message</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (event of result()?.items; track event.eventId) {
+        <tr>
+          <td class="mono"><a [routerLink]="['/events', event.eventId]">{{ event.eventId }}</a></td>
+          <td class="nowrap">{{ event.timestamp | date: 'yyyy-MM-dd HH:mm:ss' }}</td>
+          <td>{{ event.source }}</td>
+          <td>{{ event.service }}</td>
+          <td><span [class]="'badge sev-' + (event.severity | lowercase)">{{ event.severity }}</span></td>
+          <td><span [class]="'badge st-' + (event.status | lowercase)">{{ event.status }}</span></td>
+          <td>{{ event.message }}</td>
+        </tr>
+      } @empty {
+        <tr>
+          <td colspan="7" class="empty">{{ result() ? 'No events match the filters.' : 'Loading events…' }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+</div>
+
+<nav class="pager" aria-label="Pagination">
+  <button type="button" class="secondary" [disabled]="page() <= 1" (click)="goToPage(page() - 1)">Previous</button>
+  <span>Page {{ page() }} of {{ totalPages() }}</span>
+  <button type="button" class="secondary" [disabled]="page() >= totalPages()" (click)="goToPage(page() + 1)">Next</button>
+</nav>

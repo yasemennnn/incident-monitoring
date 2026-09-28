@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IncidentMonitoring.Producer
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IncidentMonitoring.Tests", "IncidentMonitoring.Tests\IncidentMonitoring.Tests.csproj", "{D01F03C5-6339-49CE-8076-FF7F69732423}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IncidentMonitoring.IntegrationTests", "IncidentMonitoring.IntegrationTests\IncidentMonitoring.IntegrationTests.csproj", "{15C97D34-0B62-403C-9D0D-E37AE5D84302}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -42,5 +44,9 @@ Global
 		{D01F03C5-6339-49CE-8076-FF7F69732423}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D01F03C5-6339-49CE-8076-FF7F69732423}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D01F03C5-6339-49CE-8076-FF7F69732423}.Release|Any CPU.Build.0 = Release|Any CPU
+		{15C97D34-0B62-403C-9D0D-E37AE5D84302}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{15C97D34-0B62-403C-9D0D-E37AE5D84302}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{15C97D34-0B62-403C-9D0D-E37AE5D84302}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{15C97D34-0B62-403C-9D0D-E37AE5D84302}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

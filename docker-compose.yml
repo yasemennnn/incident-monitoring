@@ -221,15 +221,13 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  # Angular dashboard: run it with `npm start` in ./frontend (http://localhost:4200, see frontend/README.md).
-  # To serve it from Docker instead, add a Dockerfile to ./frontend that serves the built app on port 80, then uncomment:
-  #
-  # frontend:
-  #   build: ./frontend
-  #   ports:
-  #     - "4200:80"
-  #   depends_on:
-  #     - api
+  # Angular dashboard: the production build served by nginx on http://localhost:4200.
+  # The browser calls the API and the SignalR hub on http://localhost:8080 directly, so nginx needs no proxy
+  # and the service does not depend on the api container. `npm start` in ./frontend uses the same port 4200.
+  frontend:
+    build: ./frontend
+    ports:
+      - "4200:80"
 
 volumes:
   redis-data:

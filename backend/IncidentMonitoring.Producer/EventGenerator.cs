@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace IncidentMonitoring.Producer;
 
 /// <summary>The event schema from the assignment.</summary>
@@ -40,13 +42,15 @@ public static class EventGenerator
         var severity = Pick(Severities);
 
         return new EventMessage(
-            EventId: $"EVT-{Guid.NewGuid().ToString("N")[..8].ToUpperInvariant()}",
+            // A full random UUID (122 random bits), so two generated events practically never share an id.
+            EventId: $"EVT-{Guid.NewGuid().ToString("N").ToUpperInvariant()}",
             Source: source,
             Service: Pick(ServicesBySource[source]),
             Severity: severity,
             Message: Pick(MessagesBySeverity[severity]),
             Status: Pick(Statuses),
-            Timestamp: DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ"));
+            // Milliseconds make equal timestamps within a service unlikely.
+            Timestamp: DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", CultureInfo.InvariantCulture));
     }
 
     private static string Pick(string[] values) => values[Random.Shared.Next(values.Length)];

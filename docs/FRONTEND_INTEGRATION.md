@@ -68,6 +68,7 @@ export interface DashboardSummary {
   severityDistribution: Record<Severity, number>;
   statusDistribution: Record<EventStatus, number>;
   services: ServiceStatus[];
+  snapshotAt: string | null;      // time of the PostgreSQL snapshot the numbers come from
 }
 
 export interface EventFacets {
@@ -108,24 +109,26 @@ Provides the cards (total, open, critical), the data for the severity distributi
       "latestSeverity": "MAJOR",
       "openIncidentCount": 2
     }
-  ]
+  ],
+  "snapshotAt": "2026-09-25T11:43:00.512345Z"
 }
 ```
 
 - `openEvents`: events with status `OPEN`.
-- `criticalEvents`: all events with severity `CRITICAL`.
+- `criticalEvents`: `CRITICAL` events that are not `RESOLVED`. `severityDistribution.CRITICAL` counts all `CRITICAL` events, so it can be higher.
 - `services` is sorted by name.
+- `snapshotAt`: when the numbers were computed from PostgreSQL. It is `null` only before the first projection has been written.
 
-The endpoint returns `503` if Redis is unavailable.
+The numbers come from the Redis dashboard projection. The endpoint returns `503` if Redis is unavailable.
 
 ### `GET /api/events/recent?count=10`
 
-Provides the recent events list. It returns the latest received events, newest first. `count` is between 1 and 50 (default 10).
+Provides the recent events list. It reads PostgreSQL directly and returns the latest events by `timestamp`, newest first, with `eventId` as tie-breaker. `count` is between 1 and 50 (default 10). It returns `503` if PostgreSQL is unavailable; it does not depend on Redis.
 
 ```json
 [
   {
-    "eventId": "EVT-85E7D478",
+    "eventId": "EVT-85E7D4781C2B4F6A9D3E0B7C5A1F2E64",
     "source": "PIS",
     "service": "passenger-info-service",
     "severity": "INFO",
@@ -136,7 +139,7 @@ Provides the recent events list. It returns the latest received events, newest f
     "statusUpdatedAt": null
   },
   {
-    "eventId": "EVT-63A2327D",
+    "eventId": "EVT-63A2327D8E0F4B1CA2D57E9F3B6C1D08",
     "source": "ATS",
     "service": "route-service",
     "severity": "INFO",
@@ -175,7 +178,7 @@ GET /api/events?severity=CRITICAL&status=OPEN&source=ATS&search=route&page=1&pag
 {
   "items": [
     {
-      "eventId": "EVT-61FF0B0D",
+      "eventId": "EVT-61FF0B0D5A7C4E2D8F1B3C6E9A0D4F72",
       "source": "ATS",
       "service": "route-service",
       "severity": "MAJOR",
@@ -229,7 +232,7 @@ Returns the values for the filter drop-downs. `sources` and `services` are the v
 
 ```json
 {
-  "eventId": "EVT-5C8A751E",
+  "eventId": "EVT-5C8A751E2D9B4A3FB6E1C0D8F7A5E239",
   "source": "PIS",
   "service": "passenger-info-service",
   "severity": "CRITICAL",
@@ -244,7 +247,7 @@ Returns the values for the filter drop-downs. `sources` and `services` are the v
 Unknown id → `404`:
 
 ```json
-{ "title": "Not found", "status": 404, "detail": "Event 'EVT-NOPE' was not found.", "instance": "/api/events/EVT-NOPE" }
+{ "title": "Not found", "status": 404, "detail": "Event 'EVT-9F3C2A1B7E6D4C5B8A9F0E1D2C3B4A56' was not found.", "instance": "/api/events/EVT-9F3C2A1B7E6D4C5B8A9F0E1D2C3B4A56" }
 ```
 
 ### Status update: `PUT /api/events/{eventId}/status`
@@ -259,7 +262,7 @@ Request body:
 
 ```json
 {
-  "eventId": "EVT-5C8A751E",
+  "eventId": "EVT-5C8A751E2D9B4A3FB6E1C0D8F7A5E239",
   "source": "PIS",
   "service": "passenger-info-service",
   "severity": "CRITICAL",
@@ -283,11 +286,11 @@ Other responses:
 
 | Status | When | Example |
 |---|---|---|
-| `409` | Change not allowed | `{ "title": "Invalid status change", "status": 409, "detail": "Cannot change status from RESOLVED to ACKNOWLEDGED.", "instance": "/api/events/EVT-5C8A751E/status" }` |
+| `409` | Change not allowed | `{ "title": "Invalid status change", "status": 409, "detail": "Cannot change status from RESOLVED to ACKNOWLEDGED.", "instance": "/api/events/EVT-5C8A751E2D9B4A3FB6E1C0D8F7A5E239/status" }` |
 | `404` | Unknown event | same shape as above |
 | `400` | Missing or unknown status value | `{ "title": "One or more validation errors occurred.", "status": 400, "errors": { "Status": ["The Status field is required."] } }` |
 
-After a successful update, every connected client, including the one that made the change, also receives `eventUpdated` and `summaryUpdated` over SignalR.
+After a successful update, every connected client, including the one that made the change, also receives `eventUpdated` over SignalR. A `summaryUpdated` with the new numbers follows once the dashboard projection has been rebuilt.
 
 ---
 
@@ -355,9 +358,11 @@ await connection.start();
 
 | Message | Payload | Sent when | Suggested handling |
 |---|---|---|---|
-| `eventReceived` | `IncidentEvent` | A new event was consumed from Kafka | Prepend to the recent events list. On the events page, reload the current page or show a "new events" hint. |
-| `eventUpdated` | `IncidentEvent` | An event's status was changed | Replace the event with the same `eventId` in any list or open detail |
-| `summaryUpdated` | `DashboardSummary` | Right after each `eventReceived` or `eventUpdated` | Replace the dashboard cards, chart data and service list |
+| `eventReceived` | `IncidentEvent` | A new event was consumed from Kafka and stored in PostgreSQL | Prepend to the recent events list. On the events page, reload the current page or show a "new events" hint. |
+| `eventUpdated` | `IncidentEvent` | An event's status was changed in PostgreSQL | Replace the event with the same `eventId` in any list or open detail |
+| `summaryUpdated` | `DashboardSummary` | The dashboard projection was rebuilt and written to Redis | Replace the dashboard cards, chart data and service list |
+
+`summaryUpdated` is not one-for-one with `eventReceived` / `eventUpdated`: several changes can be combined into one summary, it can arrive before or after the event message, and it is also sent by the periodic rebuild (every 30 seconds). It is not sent while Redis is unavailable.
 
 Example `summaryUpdated` payload (same shape as `GET /api/dashboard/summary`):
 
@@ -368,7 +373,8 @@ Example `summaryUpdated` payload (same shape as `GET /api/dashboard/summary`):
   "criticalEvents": 6,
   "severityDistribution": { "INFO": 30, "WARNING": 12, "MAJOR": 8, "CRITICAL": 6 },
   "statusDistribution": { "OPEN": 37, "ACKNOWLEDGED": 8, "RESOLVED": 11 },
-  "services": []
+  "services": [],
+  "snapshotAt": "2026-09-25T11:43:10.221304Z"
 }
 ```
 
@@ -396,7 +402,7 @@ export interface ProblemDetails {
 | 400 | Invalid query parameter or body. See `errors`. |
 | 404 | Event not found |
 | 409 | Status change not allowed. See `detail`. |
-| 503 | Live dashboard data (Redis) unavailable. Returned only by `/api/dashboard/summary`, `/api/services` and `/api/events/recent`. |
+| 503 | A backing store is temporarily unavailable: Redis for `/api/dashboard/summary` and `/api/services`, PostgreSQL for the event endpoints (including `/api/events/recent` and status changes). See `title`. |
 | 500 | Unexpected server error |
 
 ---
@@ -404,5 +410,5 @@ export interface ProblemDetails {
 ## Adding the frontend to Docker Compose
 
 `docker-compose.yml` contains a commented `frontend` service. To use it:
-1. Create `frontend/` with a Dockerfile that builds the app and serves it on port 80, for example with nginx.
+1. Add a Dockerfile to `frontend/` that builds the app and serves it on port 80, for example with nginx.
 2. Uncomment the service. The app will then be available at `http://localhost:4200`, which is already the allowed CORS origin.

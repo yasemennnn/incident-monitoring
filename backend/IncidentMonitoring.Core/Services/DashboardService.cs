@@ -1,38 +1,19 @@
 using IncidentMonitoring.Core.Dtos;
 using IncidentMonitoring.Core.Interfaces;
-using IncidentMonitoring.Core.Models;
-using IncidentMonitoring.Core.Rules;
 
 namespace IncidentMonitoring.Core.Services;
 
-/// <summary>Builds the dashboard and service status data from the live state in Redis.</summary>
+/// <summary>Reads the dashboard and service status data from the projection in Redis.</summary>
 public class DashboardService(IDashboardStore dashboardStore)
 {
     public async Task<DashboardSummaryDto> GetSummaryAsync()
     {
-        var counters = await dashboardStore.GetCountersAsync();
-        var services = await GetServicesAsync();
-
-        return new DashboardSummaryDto(
-            TotalEvents: counters.Total,
-            OpenEvents: counters.ByStatus[EventStatus.OPEN],
-            CriticalEvents: counters.BySeverity[Severity.CRITICAL],
-            SeverityDistribution: counters.BySeverity,
-            StatusDistribution: counters.ByStatus,
-            Services: services);
-    }
-
-    public async Task<List<ServiceStatusDto>> GetServicesAsync()
-    {
+        var totals = await dashboardStore.GetCountersAsync();
         var services = await dashboardStore.GetServicesAsync();
 
-        return services
-            .Select(s => new ServiceStatusDto(
-                Name: s.Name,
-                Status: ServiceHealthRule.Evaluate(s.OpenBySeverity),
-                LastEventTime: s.LastEventTime,
-                LatestSeverity: s.LatestSeverity,
-                OpenIncidentCount: s.OpenBySeverity.Values.Sum()))
-            .ToList();
+        return DashboardSummaryDto.From(totals.Counters, totals.CriticalEvents, totals.SnapshotAt, services);
     }
+
+    public async Task<List<ServiceStatusDto>> GetServicesAsync() =>
+        (await dashboardStore.GetServicesAsync()).Select(ServiceStatusDto.From).ToList();
 }

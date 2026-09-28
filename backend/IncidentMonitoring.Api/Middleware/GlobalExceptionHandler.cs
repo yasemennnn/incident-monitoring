@@ -1,4 +1,5 @@
 using IncidentMonitoring.Core;
+using IncidentMonitoring.Infrastructure;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using StackExchange.Redis;
@@ -15,6 +16,7 @@ public class GlobalExceptionHandler(ILogger<GlobalExceptionHandler> logger) : IE
             NotFoundException => (StatusCodes.Status404NotFound, "Not found"),
             InvalidStatusTransitionException => (StatusCodes.Status409Conflict, "Invalid status change"),
             RedisException or RedisTimeoutException => (StatusCodes.Status503ServiceUnavailable, "Live dashboard data (Redis) is unavailable"),
+            _ when TransientFailure.IsTransient(exception) => (StatusCodes.Status503ServiceUnavailable, "Database temporarily unavailable"),
             _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred")
         };
 

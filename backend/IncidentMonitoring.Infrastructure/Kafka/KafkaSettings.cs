@@ -10,9 +10,15 @@ public class KafkaSettings
     /// <summary>All API instances share this consumer group, so each message is processed once.</summary>
     public string GroupId { get; set; } = "incident-monitoring-api";
 
-    /// <summary>How many times a message is tried before it goes to the dead-letter topic.</summary>
+    /// <summary>
+    /// How many times a message is tried (including the first) before it goes to the dead-letter topic.
+    /// Applies only to failures that are not a temporary PostgreSQL outage; those are retried without limit.
+    /// </summary>
     public int MaxAttempts { get; set; } = 3;
 
-    /// <summary>Wait before retry n is n * RetryDelayMs (1 s, 2 s, ...).</summary>
+    /// <summary>First retry delay; each further retry waits twice as long (1 s, 2 s, 4 s, ...), up to MaxRetryDelayMs.</summary>
     public int RetryDelayMs { get; set; } = 1000;
+
+    /// <summary>Longest wait between two retries during a PostgreSQL outage.</summary>
+    public int MaxRetryDelayMs { get; set; } = 30000;
 }

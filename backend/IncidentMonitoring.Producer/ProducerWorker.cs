@@ -25,10 +25,13 @@ public class ProducerWorker(
 
         logger.LogInformation("Producing to {Topic} every {IntervalMs} ms", settings.Topic, settings.IntervalMs);
 
-        var sent = 0;
+        // attempted counts every generated event; published only those Kafka has acknowledged.
+        var attempted = 0;
+        var published = 0;
         while (!stoppingToken.IsCancellationRequested)
         {
             var message = EventGenerator.Create();
+            attempted++;
             try
             {
                 // The service name is the message key, so all events of one service go to the same
@@ -39,11 +42,13 @@ public class ProducerWorker(
                     Value = JsonSerializer.Serialize(message, JsonOptions)
                 }, stoppingToken);
 
+                published++;
                 logger.LogInformation("Published {EventId} {Severity} {Status} {Service} to partition {Partition}",
                     message.EventId, message.Severity, message.Status, message.Service, result.Partition.Value);
             }
             catch (ProduceException<string, string> ex)
             {
+                // The event is dropped; the next one is still attempted.
                 logger.LogError(ex, "Failed to publish {EventId}", message.EventId);
             }
             catch (OperationCanceledException)
@@ -51,10 +56,9 @@ public class ProducerWorker(
                 break;
             }
 
-            sent++;
-            if (settings.Count > 0 && sent >= settings.Count)
+            // Count limits attempts, so a manual run ends even when Kafka is unreachable.
+            if (settings.Count > 0 && attempted >= settings.Count)
             {
-                logger.LogInformation("Sent {Count} events, stopping", sent);
                 lifetime.StopApplication();
                 break;
             }
@@ -70,5 +74,7 @@ public class ProducerWorker(
         }
 
         producer.Flush(TimeSpan.FromSeconds(5));
+        logger.LogInformation("Producer stopping: {Attempted} events attempted, {Published} published, {Failed} failed",
+            attempted, published, attempted - published);
     }
 }

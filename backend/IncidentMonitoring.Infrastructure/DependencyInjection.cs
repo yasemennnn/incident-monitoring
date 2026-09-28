@@ -18,13 +18,27 @@ public static class DependencyInjection
         services.AddScoped<IEventRepository, EventRepository>();
 
         // Redis. AbortOnConnectFail = false: the API starts even if Redis is down and reconnects automatically.
-        services.AddSingleton<IConnectionMultiplexer>(_ =>
+        // FailFast: while disconnected, commands fail at once instead of queueing; the projection worker retries.
+        services.AddSingleton<IConnectionMultiplexer>(sp =>
         {
             var redisOptions = ConfigurationOptions.Parse(configuration.GetConnectionString("Redis")!);
             redisOptions.AbortOnConnectFail = false;
-            return ConnectionMultiplexer.Connect(redisOptions);
+            redisOptions.BacklogPolicy = BacklogPolicy.FailFast;
+            var redis = ConnectionMultiplexer.Connect(redisOptions);
+
+            // The worker is resolved only when the event fires, so creating the connection does not depend on it.
+            // The subscription lives exactly as long as this singleton connection.
+            redis.ConnectionRestored += (_, _) => sp.GetRequiredService<RedisProjectionWorker>().RedisConnectionRestored();
+            return redis;
         });
         services.AddSingleton<IDashboardStore, RedisDashboardStore>();
+
+        // Dashboard projection: the only writer of the Redis dashboard. All three registrations resolve the same
+        // singleton (AddHostedService<RedisProjectionWorker>() would create a second instance).
+        services.Configure<DashboardProjectionSettings>(configuration.GetSection("DashboardProjection"));
+        services.AddSingleton<RedisProjectionWorker>();
+        services.AddSingleton<IDashboardRefresher>(sp => sp.GetRequiredService<RedisProjectionWorker>());
+        services.AddHostedService(sp => sp.GetRequiredService<RedisProjectionWorker>());
 
         // Kafka
         services.Configure<KafkaSettings>(configuration.GetSection("Kafka"));

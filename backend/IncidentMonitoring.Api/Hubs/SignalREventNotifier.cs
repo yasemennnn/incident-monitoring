@@ -1,31 +1,31 @@
 using IncidentMonitoring.Core.Dtos;
 using IncidentMonitoring.Core.Interfaces;
-using IncidentMonitoring.Core.Services;
 using Microsoft.AspNetCore.SignalR;
 
 namespace IncidentMonitoring.Api.Hubs;
 
-/// <summary>Sends the changed event and the new dashboard summary to all connected clients.</summary>
-public class SignalREventNotifier(
-    IHubContext<IncidentHub> hub,
-    DashboardService dashboardService,
-    ILogger<SignalREventNotifier> logger) : IEventNotifier
+/// <summary>
+/// Pushes changes to all connected clients. Each method sends exactly one message and reads nothing: the dashboard
+/// summary is pushed by the projection worker after it has written the projection to Redis.
+/// </summary>
+public class SignalREventNotifier(IHubContext<IncidentHub> hub, ILogger<SignalREventNotifier> logger) : IEventNotifier
 {
-    public Task EventReceivedAsync(EventDto incidentEvent) => SendAsync("eventReceived", incidentEvent);
+    public Task EventReceivedAsync(EventDto incidentEvent) => SendAsync("eventReceived", incidentEvent, incidentEvent.EventId);
 
-    public Task EventUpdatedAsync(EventDto incidentEvent) => SendAsync("eventUpdated", incidentEvent);
+    public Task EventUpdatedAsync(EventDto incidentEvent) => SendAsync("eventUpdated", incidentEvent, incidentEvent.EventId);
 
-    private async Task SendAsync(string method, EventDto incidentEvent)
+    public Task SummaryUpdatedAsync(DashboardSummaryDto summary) => SendAsync("summaryUpdated", summary, "dashboard summary");
+
+    private async Task SendAsync(string method, object payload, string subject)
     {
-        // A failed notification must never fail event processing or the status update.
+        // A failed notification must never fail event processing, a status update or a projection rebuild.
         try
         {
-            await hub.Clients.All.SendAsync(method, incidentEvent);
-            await hub.Clients.All.SendAsync("summaryUpdated", await dashboardService.GetSummaryAsync());
+            await hub.Clients.All.SendAsync(method, payload);
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "SignalR notification {Method} failed for {EventId}", method, incidentEvent.EventId);
+            logger.LogWarning(ex, "SignalR notification {Method} failed for {Subject}", method, subject);
         }
     }
 }

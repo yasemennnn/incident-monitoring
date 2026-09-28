@@ -1,3 +1,4 @@
+using System.Data;
 using IncidentMonitoring.Core.Dtos;
 using IncidentMonitoring.Core.Interfaces;
 using IncidentMonitoring.Core.Models;
@@ -25,10 +26,27 @@ public class EventRepository(AppDbContext db) : IEventRepository
     }
 
     public Task<IncidentEvent?> GetAsync(string eventId) =>
-        db.Events.FirstOrDefaultAsync(e => e.EventId == eventId);
+        db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.EventId == eventId);
 
-    public Task<List<IncidentEvent>> GetByIdsAsync(List<string> eventIds) =>
-        db.Events.AsNoTracking().Where(e => eventIds.Contains(e.EventId)).ToListAsync();
+    public async Task<bool> TryUpdateStatusAsync(string eventId, EventStatus expectedStatus, EventStatus newStatus, DateTime statusUpdatedAt)
+    {
+        // "AND Status = expectedStatus" makes concurrent changes safe: a second UPDATE waits for the first one's row
+        // lock, PostgreSQL then re-checks the WHERE clause against the new row, and it no longer matches.
+        var updatedRows = await db.Events
+            .Where(e => e.EventId == eventId && e.Status == expectedStatus)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(e => e.Status, newStatus)
+                .SetProperty(e => e.StatusUpdatedAt, (DateTime?)statusUpdatedAt));
+
+        return updatedRows == 1;
+    }
+
+    public Task<List<IncidentEvent>> GetRecentAsync(int count) =>
+        db.Events.AsNoTracking()
+            .OrderByDescending(e => e.Timestamp)
+            .ThenByDescending(e => e.EventId) // same order as the event list, stable for equal timestamps
+            .Take(count)
+            .ToListAsync();
 
     public async Task<PagedResult<IncidentEvent>> SearchAsync(EventFilter filter)
     {
@@ -54,11 +72,45 @@ public class EventRepository(AppDbContext db) : IEventRepository
         var totalCount = await query.CountAsync();
         var items = await query
             .OrderByDescending(e => e.Timestamp)
+            .ThenByDescending(e => e.EventId) // events with the same timestamp keep a stable order across pages
             .Skip((filter.Page - 1) * filter.PageSize)
             .Take(filter.PageSize)
             .ToListAsync();
 
         return new PagedResult<IncidentEvent>(items, filter.Page, filter.PageSize, totalCount);
+    }
+
+    public async Task<DashboardSnapshot> GetDashboardSnapshotAsync()
+    {
+        // REPEATABLE READ: every query in this transaction sees the same snapshot, so the counts and the latest
+        // events describe the same moment even while new events are being committed. READ ONLY is a safety guard;
+        // it must be the first statement of the transaction.
+        await using var transaction = await db.Database.BeginTransactionAsync(IsolationLevel.RepeatableRead);
+        await db.Database.ExecuteSqlRawAsync("SET TRANSACTION READ ONLY");
+
+        // The first query of the transaction establishes the snapshot, so its start time (statement_timestamp())
+        // is the snapshot time. It comes from PostgreSQL, not the API server's clock.
+        var snapshotAt = await db.Database.SqlQueryRaw<DateTime>("SELECT statement_timestamp() AS \"Value\"").SingleAsync();
+
+        // Q1: one row per (service, status, severity) combination; the events themselves are not loaded.
+        var counts = await db.Events
+            .GroupBy(e => new { e.Service, e.Status, e.Severity })
+            .Select(g => new EventCountRow(g.Key.Service, g.Key.Status, g.Key.Severity, g.LongCount()))
+            .ToListAsync();
+
+        // Q2: the latest event of each service. EventId breaks ties between events with the same timestamp.
+        // The projection must stay inside the group: EF Core 8 cannot translate a Select placed after First().
+        var latest = await db.Events
+            .GroupBy(e => e.Service)
+            .Select(g => g
+                .OrderByDescending(e => e.Timestamp)
+                .ThenByDescending(e => e.EventId)
+                .Select(e => new LatestServiceEvent(e.Service, e.Timestamp, e.Severity))
+                .First())
+            .ToListAsync();
+
+        await transaction.CommitAsync();
+        return new DashboardSnapshot(counts, latest, snapshotAt);
     }
 
     public async Task<EventFacetsDto> GetFacetsAsync()
@@ -67,6 +119,4 @@ public class EventRepository(AppDbContext db) : IEventRepository
         var services = await db.Events.Select(e => e.Service).Distinct().OrderBy(s => s).ToListAsync();
         return new EventFacetsDto(sources, services, Enum.GetValues<Severity>().ToList(), Enum.GetValues<EventStatus>().ToList());
     }
-
-    public Task SaveChangesAsync() => db.SaveChangesAsync();
 }

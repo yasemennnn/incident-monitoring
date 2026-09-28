@@ -2,6 +2,7 @@ using IncidentMonitoring.Api.Hubs;
 using IncidentMonitoring.Api.Middleware;
 using IncidentMonitoring.Core;
 using IncidentMonitoring.Core.Interfaces;
+using IncidentMonitoring.Core.Rules;
 using IncidentMonitoring.Core.Services;
 using IncidentMonitoring.Infrastructure;
 using IncidentMonitoring.Infrastructure.Data;
@@ -40,6 +41,8 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(policy => policy
     .AllowCredentials()));
 
 // Business services (Core) and the SignalR notifier.
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton(builder.Configuration.GetSection("EventValidation").Get<EventValidationOptions>() ?? new EventValidationOptions());
 builder.Services.AddScoped<EventProcessor>();
 builder.Services.AddScoped<EventService>();
 builder.Services.AddScoped<DashboardService>();

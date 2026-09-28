@@ -59,6 +59,6 @@ export interface DashboardSummary {
   severityDistribution: Partial<Record<Severity, number>>;
   statusDistribution: Partial<Record<EventStatus, number>>;
   services: ServiceStatus[];
-  /** Time of the projection snapshot. Not sent by the current backend yet, so it may be missing. */
+  /** PostgreSQL time of the snapshot the numbers were computed from; null before the first projection is written. */
   snapshotAt?: string;
 }

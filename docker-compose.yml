@@ -3,43 +3,140 @@
 #   API + Swagger   http://localhost:8080/swagger
 #   Kafka UI        http://localhost:8081
 
+# The Kafka cluster ID, shared by all three nodes. Generated once with
+# `kafka-storage.sh random-uuid`; it must never change while the kafka-*-data volumes exist.
+x-kafka-cluster-id: &kafka-cluster-id "KdMsohf8TcKW1bo6CtEqSw"
+
 services:
-  # Kafka in KRaft mode (no ZooKeeper).
-  kafka:
+  # Kafka: three nodes in KRaft mode (no ZooKeeper), each one both broker and controller.
+  # Every topic has 3 replicas and a write needs 2 of them (min.insync.replicas=2), so one node can fail
+  # without losing acknowledged events.
+  # Containers connect to kafka-N:9092, programs on the host machine to localhost:29092 / 29093 / 29094.
+  kafka-1:
     image: apache/kafka:3.9.0
     ports:
       - "29092:29092"
     environment:
+      CLUSTER_ID: *kafka-cluster-id
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
-      # Containers connect to kafka:9092, programs on the host machine to localhost:29092.
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
       KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:29092
-      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-1:9092,EXTERNAL://localhost:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
-      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-1-data:/var/lib/kafka/data
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
       interval: 10s
       timeout: 10s
       retries: 10
+      start_period: 30s
+    restart: unless-stopped
 
-  # Creates the two topics once and exits.
+  kafka-2:
+    image: apache/kafka:3.9.0
+    ports:
+      - "29093:29093"
+    environment:
+      CLUSTER_ID: *kafka-cluster-id
+      KAFKA_NODE_ID: 2
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:29093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-2:9092,EXTERNAL://localhost:29093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-2-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  kafka-3:
+    image: apache/kafka:3.9.0
+    ports:
+      - "29094:29094"
+    environment:
+      CLUSTER_ID: *kafka-cluster-id
+      KAFKA_NODE_ID: 3
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka-1:9093,2@kafka-2:9093,3@kafka-3:9093
+      KAFKA_LISTENERS: INTERNAL://:9092,CONTROLLER://:9093,EXTERNAL://:29094
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka-3:9092,EXTERNAL://localhost:29094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 3
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 2
+      KAFKA_DEFAULT_REPLICATION_FACTOR: 3
+      KAFKA_MIN_INSYNC_REPLICAS: 2
+      KAFKA_UNCLEAN_LEADER_ELECTION_ENABLE: "false"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-3-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # Waits until all three brokers are registered (a healthy container is not enough: a topic with
+  # 3 replicas can only be created once 3 brokers are in the cluster), then creates the two topics and exits.
+  # ($$ is a literal $ for the shell; a single $ would be replaced by Docker Compose.)
   kafka-init:
     image: apache/kafka:3.9.0
     depends_on:
-      kafka:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic incident-events --partitions 3 --replication-factor 1
-        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic incident-events-dlq --partitions 1 --replication-factor 1
+        set -e
+        BOOTSTRAP=kafka-1:9092,kafka-2:9092,kafka-3:9092
+        echo "Waiting until 3 brokers are registered..."
+        attempt=0
+        until [ "$$(/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server $$BOOTSTRAP 2>/dev/null | grep -c '(id: ')" -ge 3 ]; do
+          attempt=$$((attempt + 1))
+          if [ $$attempt -ge 30 ]; then echo "Kafka cluster not ready: fewer than 3 brokers after 30 attempts"; exit 1; fi
+          sleep 2
+        done
+        echo "3 brokers registered."
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server $$BOOTSTRAP --create --if-not-exists --topic incident-events --partitions 3 --replication-factor 3 --config min.insync.replicas=2
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server $$BOOTSTRAP --create --if-not-exists --topic incident-events-dlq --partitions 1 --replication-factor 3 --config min.insync.replicas=2
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server $$BOOTSTRAP --describe --topic incident-events
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server $$BOOTSTRAP --describe --topic incident-events-dlq
 
   # Web UI to look at topics, messages, the consumer group and the dead-letter topic.
   kafka-ui:
@@ -48,23 +145,29 @@ services:
       - "8081:8080"
     environment:
       KAFKA_CLUSTERS_0_NAME: local
-      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka-1:9092,kafka-2:9092,kafka-3:9092
     depends_on:
-      kafka:
+      kafka-1:
+        condition: service_healthy
+      kafka-2:
+        condition: service_healthy
+      kafka-3:
         condition: service_healthy
 
   redis:
     image: redis:7.4-alpine
     ports:
       - "6379:6379"
-    # Append-only file: the dashboard counters survive a Redis restart.
-    command: ["redis-server", "--appendonly", "yes"]
+    # Append-only file: the dashboard survives a Redis restart.
+    # noeviction: when memory is full Redis rejects writes instead of silently dropping dashboard keys.
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
     volumes:
       - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       retries: 10
+    restart: unless-stopped
 
   postgres:
     image: postgres:16-alpine
@@ -91,7 +194,7 @@ services:
     environment:
       ConnectionStrings__Postgres: Host=postgres;Port=5432;Database=incidents;Username=incidents;Password=incidents
       ConnectionStrings__Redis: redis:6379
-      Kafka__BootstrapServers: kafka:9092
+      Kafka__BootstrapServers: kafka-1:9092,kafka-2:9092,kafka-3:9092
       Cors__AllowedOrigin: http://localhost:4200
       Logging__Console__FormatterName: json   # structured JSON logs
     depends_on:
@@ -109,7 +212,7 @@ services:
       context: ./backend
       dockerfile: IncidentMonitoring.Producer/Dockerfile
     environment:
-      Producer__BootstrapServers: kafka:9092
+      Producer__BootstrapServers: kafka-1:9092,kafka-2:9092,kafka-3:9092
       Producer__Topic: incident-events
       Producer__IntervalMs: 2000
       Logging__Console__FormatterName: json
@@ -118,8 +221,8 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  # Angular dashboard (not implemented yet). To add it later, create ./frontend with a Dockerfile
-  # that serves the built app on port 80, then uncomment:
+  # Angular dashboard: run it with `npm start` in ./frontend (http://localhost:4200, see frontend/README.md).
+  # To serve it from Docker instead, add a Dockerfile to ./frontend that serves the built app on port 80, then uncomment:
   #
   # frontend:
   #   build: ./frontend
@@ -131,3 +234,6 @@ services:
 volumes:
   redis-data:
   postgres-data:
+  kafka-1-data:
+  kafka-2-data:
+  kafka-3-data:

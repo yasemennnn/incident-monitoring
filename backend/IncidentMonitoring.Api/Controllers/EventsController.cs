@@ -17,7 +17,7 @@ public class EventsController(EventService eventService) : ControllerBase
     public async Task<PagedResult<EventDto>> GetEvents([FromQuery] EventFilter filter) =>
         await eventService.GetEventsAsync(filter);
 
-    /// <summary>The most recently received events, newest first (from the Redis recent list).</summary>
+    /// <summary>The latest events by event time, newest first (from PostgreSQL).</summary>
     /// <param name="count">Number of events, 1-50 (default 10).</param>
     [HttpGet("recent")]
     [ProducesResponseType<List<EventDto>>(StatusCodes.Status200OK)]
@@ -40,7 +40,8 @@ public class EventsController(EventService eventService) : ControllerBase
     /// <summary>Changes the status of an event.</summary>
     /// <remarks>
     /// Allowed changes: OPEN → ACKNOWLEDGED or RESOLVED, ACKNOWLEDGED → RESOLVED, RESOLVED → OPEN.
-    /// Any other change returns 409.
+    /// Requesting the current status returns 200 and changes nothing. Any other change returns 409,
+    /// as does a change that lost to a concurrent status change.
     /// </remarks>
     [HttpPut("{eventId}/status")]
     [ProducesResponseType<EventDto>(StatusCodes.Status200OK)]

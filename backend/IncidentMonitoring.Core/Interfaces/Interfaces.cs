@@ -12,39 +12,62 @@ public interface IEventRepository
     /// <summary>Saves a new event. Returns false if an event with the same id already exists.</summary>
     Task<bool> AddAsync(IncidentEvent incidentEvent);
 
+    /// <summary>Reads an event. It is not tracked: changes are made with <see cref="TryUpdateStatusAsync"/>.</summary>
     Task<IncidentEvent?> GetAsync(string eventId);
 
-    Task<List<IncidentEvent>> GetByIdsAsync(List<string> eventIds);
+    /// <summary>The latest events by event time, newest first; EventId breaks ties.</summary>
+    Task<List<IncidentEvent>> GetRecentAsync(int count);
 
     Task<PagedResult<IncidentEvent>> SearchAsync(EventFilter filter);
 
     Task<EventFacetsDto> GetFacetsAsync();
 
-    /// <summary>Persists changes made to events loaded with <see cref="GetAsync"/>.</summary>
-    Task SaveChangesAsync();
+    /// <summary>
+    /// Changes the status in one conditional UPDATE, only if it is still <paramref name="expectedStatus"/>.
+    /// Returns false when no row matched: the event is gone or another request changed its status first.
+    /// </summary>
+    Task<bool> TryUpdateStatusAsync(string eventId, EventStatus expectedStatus, EventStatus newStatus, DateTime statusUpdatedAt);
+
+    /// <summary>
+    /// Reads the counts per service, status and severity, the latest event per service and the snapshot time,
+    /// all from one consistent database snapshot.
+    /// </summary>
+    Task<DashboardSnapshot> GetDashboardSnapshotAsync();
 }
 
-/// <summary>Live dashboard state (Redis).</summary>
+/// <summary>
+/// The dashboard projection in Redis. It is derived from PostgreSQL and written only by the projection worker.
+/// </summary>
 public interface IDashboardStore
 {
-    /// <summary>Updates counters, service state and the recent list for a new event.</summary>
-    Task AddEventAsync(IncidentEvent incidentEvent);
-
-    /// <summary>Moves the status counters from the old to the new status.</summary>
-    Task UpdateStatusAsync(IncidentEvent incidentEvent, EventStatus oldStatus);
-
-    Task<DashboardCounters> GetCountersAsync();
+    /// <summary>Totals, severity and status counts, unresolved CRITICAL count and snapshot time.</summary>
+    Task<DashboardTotals> GetCountersAsync();
 
     Task<List<ServiceState>> GetServicesAsync();
 
-    /// <summary>Ids of the most recently received events, newest first.</summary>
-    Task<List<string>> GetRecentEventIdsAsync(int count);
+    /// <summary>Replaces the whole dashboard with absolute values from one PostgreSQL snapshot.</summary>
+    Task WriteSnapshotAsync(DashboardState state);
 }
 
-/// <summary>Pushes changes to connected dashboards (SignalR).</summary>
+/// <summary>Asks for the Redis dashboard to be rebuilt from PostgreSQL.</summary>
+public interface IDashboardRefresher
+{
+    /// <summary>
+    /// Marks the dashboard as out of date and returns immediately; the rebuild runs in the background.
+    /// Many requests close together result in one rebuild.
+    /// </summary>
+    void RequestRefresh();
+}
+
+/// <summary>Pushes changes to connected dashboards (SignalR). Sending is best effort: failures are not thrown.</summary>
 public interface IEventNotifier
 {
+    /// <summary>A new event was stored.</summary>
     Task EventReceivedAsync(EventDto incidentEvent);
 
+    /// <summary>An event's status was changed.</summary>
     Task EventUpdatedAsync(EventDto incidentEvent);
+
+    /// <summary>A new dashboard projection was written; the summary is exactly the one written.</summary>
+    Task SummaryUpdatedAsync(DashboardSummaryDto summary);
 }

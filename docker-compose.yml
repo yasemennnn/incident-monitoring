@@ -1,5 +1,6 @@
 # Start everything:  docker compose up -d --build
 #
+#   Dashboard       http://localhost:4200
 #   API + Swagger   http://localhost:8080/swagger
 #   Kafka UI        http://localhost:8081
 

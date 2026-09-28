@@ -3,22 +3,28 @@
 Angular 21 app for the incident monitoring backend: Dashboard, Events (with detail and status change) and Service Status.
 Data is loaded over REST; SignalR pushes changes; after a reconnect the pages reload over REST.
 
-## Requirements
+## Running with Docker Compose
 
-- Node.js 22.12 or newer
-- The backend running on `http://localhost:8080` (`docker compose up -d` in the repository root)
-
-The backend only allows the origin `http://localhost:4200`, so keep the default port.
-
-## Commands
+From the repository root:
 
 ```bash
-npm install          # see the note below if this fails
-npm start            # http://localhost:4200
-npm test -- --watch=false
-npm run build        # output in dist/frontend
+docker compose up -d --build   # builds this app and serves it with nginx on http://localhost:4200
 ```
 
+## Local development
+
+Requires Node.js 22.12 or newer and the backend running on `http://localhost:8080`.
+Stop the Compose frontend first, because it also uses port 4200:
+
+```bash
+docker compose stop frontend   # from the repository root
+npm install                    # see the note below if this fails
+npm start                      # http://localhost:4200
+npm test -- --watch=false
+npm run build                  # output in dist/frontend
+```
+
+The backend only allows the origin `http://localhost:4200`, so keep the default port.
 Backend addresses are in `src/environments/environment.ts`.
 
 **npm 10.9 note:** `npm install` can fail with `Cannot read properties of null (reading 'edgesOut')`

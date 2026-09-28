@@ -1,6 +1,6 @@
 # Frontend Integration Guide
 
-Everything the Angular dashboard needs from the backend. All examples below are real responses from the running system.
+The backend contract the Angular dashboard uses. The JSON examples show the exact response shapes; the values are illustrative.
 
 | | |
 |---|---|
@@ -9,7 +9,7 @@ Everything the Angular dashboard needs from the backend. All examples below are 
 | Swagger (try every endpoint) | `http://localhost:8080/swagger` |
 | Allowed CORS origin | `http://localhost:4200` (with credentials) |
 
-Start the backend with `docker compose up -d --build` from the repository root. A new event arrives every 2 seconds.
+Start everything with `docker compose up -d --build` from the repository root. Compose also serves the dashboard on `http://localhost:4200` (nginx). A new event arrives every 2 seconds.
 
 ---
 
@@ -407,8 +407,6 @@ export interface ProblemDetails {
 
 ---
 
-## Adding the frontend to Docker Compose
+## Frontend in Docker Compose
 
-`docker-compose.yml` contains a commented `frontend` service. To use it:
-1. Add a Dockerfile to `frontend/` that builds the app and serves it on port 80, for example with nginx.
-2. Uncomment the service. The app will then be available at `http://localhost:4200`, which is already the allowed CORS origin.
+The `frontend` service builds the Angular app (`frontend/Dockerfile`) and serves it with nginx on `http://localhost:4200`, the allowed CORS origin. nginx only serves files: the browser calls the API and the hub on `http://localhost:8080` directly. For local development with `npm start`, stop the container first (`docker compose stop frontend`), because both use port 4200.

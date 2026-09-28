@@ -54,7 +54,7 @@ public class KafkaConsumerService(
         };
         using var consumer = new ConsumerBuilder<string?, string?>(consumerConfig).Build();
         using var deadLetterProducer = new ProducerBuilder<string?, string?>(
-            new ProducerConfig { BootstrapServers = _settings.BootstrapServers, Acks = Acks.All }).Build();
+            new ProducerConfig { BootstrapServers = _settings.BootstrapServers, Acks = Acks.All, MessageTimeoutMs = 30_000 }).Build();
 
         consumer.Subscribe(_settings.Topic);
         logger.LogInformation("Kafka consumer started: topic {Topic}, group {GroupId}", _settings.Topic, _settings.GroupId);

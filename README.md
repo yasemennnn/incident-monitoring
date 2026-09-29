@@ -426,6 +426,13 @@ A minimal GitHub Actions workflow ([.github/workflows/ci.yml](.github/workflows/
 - **Consumer and projection worker inside the API process.** One backend container keeps the deployment simple. Both are `BackgroundService`s.
 - **UPPERCASE enum names** (`CRITICAL`, `OPEN`). They are exactly the schema values, so the same text is used in Kafka, JSON, Redis keys and the database without any mapping.
 
+### Performance considerations
+
+- Dashboard and service-status requests read precomputed values from Redis instead of aggregating the `events` table on every request.
+- Projection refresh requests that arrive close together are coalesced, so a burst of events does not trigger one rebuild per event.
+- Event listing is paged in PostgreSQL (`pageSize` up to 100), with indexes supporting the timestamp sort and common filter columns. Text search remains an exception as documented in the limitations.
+- Realtime-triggered REST refreshes are batched with `auditTime`, preventing one REST request per SignalR event while still refreshing during a continuous event stream.
+
 ## 14. Known limitations and improvement areas
 
 - **Single PostgreSQL instance.** While it is down, database endpoints return `503` and the consumer waits. Improvement: a replicated PostgreSQL setup.
@@ -437,6 +444,9 @@ A minimal GitHub Actions workflow ([.github/workflows/ci.yml](.github/workflows/
 - **No authentication or authorization.** Anyone who can reach the API can change statuses.
 - **Search uses `ILIKE`.** Fine for this data volume. Improvement for large tables: a trigram or full-text index.
 - **No dead-letter replay tool.** Dead-lettered messages can be inspected in Kafka UI but are not re-processed. Improvement: a replay command.
+- **No metrics or distributed tracing.** The backend uses structured JSON logging, but metrics and traces are not collected. Improvement: add OpenTelemetry metrics and tracing.
+- **Frontend backend addresses are build-time configuration.** The current Angular environment targets the local backend. Improvement: use runtime configuration or a reverse proxy for deployment to other environments.
+- **`expectedStatus` detects status mismatches, not ABA changes.** A sequence such as OPEN → RESOLVED → OPEN can return to the value an older client originally observed. Improvement: use an explicit version or ETag for stronger optimistic concurrency.
 
 ## 15. Screenshots
 

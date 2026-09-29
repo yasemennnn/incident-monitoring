@@ -2,7 +2,7 @@ import { DatePipe, LowerCasePipe } from '@angular/common';
 import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
-import { debounceTime, merge } from 'rxjs';
+import { auditTime, merge } from 'rxjs';
 import { describeError, isServiceUnavailable } from '../../core/http-errors';
 import { DashboardSummary, EventDto, SEVERITIES, Severity } from '../../core/models/api.models';
 import { ApiService } from '../../core/services/api.service';
@@ -39,9 +39,10 @@ export class DashboardPage {
       this.summary.set(summary);
       this.summaryError.set(null);
     });
-    // New or changed events can change the recent list; reload it at most twice a second.
+    // New or changed events can change the recent list; reload it at most twice a second,
+    // also while events keep arriving without a pause.
     merge(this.realtime.eventReceived$, this.realtime.eventUpdated$)
-      .pipe(debounceTime(500), takeUntilDestroyed())
+      .pipe(auditTime(500), takeUntilDestroyed())
       .subscribe(() => this.loadRecent());
     this.realtime.reconnected$.pipe(takeUntilDestroyed()).subscribe(() => {
       this.loadSummary();

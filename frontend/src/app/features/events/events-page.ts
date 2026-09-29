@@ -3,7 +3,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { NonNullableFormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Subject, catchError, debounceTime, filter, of, switchMap, tap } from 'rxjs';
+import { Subject, auditTime, catchError, debounceTime, filter, of, switchMap, tap } from 'rxjs';
 import { describeError } from '../../core/http-errors';
 import { EventDto, EventFacets, PagedResult } from '../../core/models/api.models';
 import { ApiService } from '../../core/services/api.service';
@@ -64,18 +64,18 @@ export class EventsPage {
     this.filters.valueChanges.pipe(debounceTime(300), takeUntilDestroyed()).subscribe(() => this.onFiltersChanged());
 
     // A new event would appear on the first page (newest first). Rather than guessing whether it
-    // matches the filters, ask the backend again.
+    // matches the filters, ask the backend again: at most once a second, also during a steady stream.
     this.realtime.eventReceived$
       .pipe(
         filter(() => this.page() === 1),
-        debounceTime(1000),
+        auditTime(1000),
         takeUntilDestroyed(),
       )
       .subscribe(() => this.reload());
     this.realtime.eventUpdated$
       .pipe(
         filter((event) => this.isVisible(event.eventId)),
-        debounceTime(300),
+        auditTime(300),
         takeUntilDestroyed(),
       )
       .subscribe(() => this.reload());

@@ -64,6 +64,23 @@ describe('DashboardPage', () => {
     expect(text()).toContain('121');
   });
 
+  it('keeps reloading recent events during a steady stream of events', async () => {
+    const { api, realtime } = await render(() => of(summary));
+    vi.useFakeTimers();
+    try {
+      // One event every 100 ms for 2 s: the stream never pauses for the 500 ms window.
+      for (let i = 0; i < 20; i++) {
+        realtime.eventReceived.next(testEvent());
+        vi.advanceTimersByTime(100);
+      }
+
+      // The initial load plus about one reload per 500 ms while the events keep coming.
+      expect(api.getRecentEvents.mock.calls.length).toBeGreaterThanOrEqual(4);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('reloads everything over REST after a reconnect', async () => {
     const { fixture, api, realtime } = await render(() => of(summary));
 

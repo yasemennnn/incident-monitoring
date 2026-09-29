@@ -15,7 +15,7 @@ Everything runs with Docker Compose. [docs/FRONTEND_INTEGRATION.md](docs/FRONTEN
 flowchart LR
     P[Producer<br/>.NET worker] -->|JSON event<br/>key = service| K[(Kafka, 3 nodes<br/>incident-events<br/>RF 3, min ISR 2)]
     K -->|consumer group| C[Kafka consumer]
-    C -->|invalid / conflict| DLQ[(Kafka<br/>incident-events-dlq)]
+    C -->|invalid, conflict or<br/>failed after all attempts| DLQ[(Kafka<br/>incident-events-dlq)]
 
     subgraph API [IncidentMonitoring.Api]
         C --> EP[EventProcessor]
@@ -200,6 +200,7 @@ The topics are created by the `kafka-init` container. The dead-letter topic is a
 - `acks=all` and idempotence are enabled.
 - Event ids are `EVT-` followed by a random UUID (32 uppercase hex digits). Timestamps are UTC with milliseconds.
 - The interval is configurable (`Producer__IntervalMs`). `Producer__Count` sends a fixed number of events and exits, for manual runs. On stop it logs how many events were attempted and how many were published.
+- Each write is awaited before the next event is generated. The producer does not set `MessageTimeoutMs`, so the Confluent.Kafka default applies (`message.timeout.ms`, 300 000 ms, including the client's own retries). If Kafka has not confirmed a write by then, the event is logged as failed and dropped, and the producer continues with the next one.
 
 **Consumer** (`KafkaConsumerService`)
 - **Consumer group** `incident-monitoring-api`, consuming the 3 partitions of `incident-events`.
@@ -214,7 +215,7 @@ The topics are created by the `kafka-init` container. The dead-letter topic is a
 | Same `eventId` and same content (source, service, severity, message, timestamp) | Duplicate: logged and ignored. A different status in the message does not overwrite the stored status. |
 | Same `eventId`, different content | Conflict: the stored event is kept and the message is sent to `incident-events-dlq`. |
 | PostgreSQL temporarily unavailable | Nothing is committed and nothing goes to the dead-letter topic. The consumer seeks back to the same offset and reads it again after 1 s, 2 s, 4 s … up to 30 s, for as long as the outage lasts. |
-| Any other processing error | Retried up to `MaxAttempts` = 3 times with waits of 1 s and 2 s, then sent to `incident-events-dlq`. |
+| Any other processing error | Processed up to `MaxAttempts` = 3 times in total (2 retries, waiting 1 s and then 2 s), then sent to `incident-events-dlq`. |
 | Kafka offset commit fails | Logged. The message may be delivered again, which is then handled as a duplicate. |
 
 A dead-lettered message keeps its original key and value. These headers are added:

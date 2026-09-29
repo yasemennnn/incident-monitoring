@@ -80,7 +80,7 @@
         </tr>
       } @empty {
         <tr>
-          <td colspan="7" class="empty">{{ result() ? 'No events match the filters.' : 'Loading events…' }}</td>
+          <td colspan="7" class="empty">{{ result() ? 'No events match the filters.' : loading() ? 'Loading events…' : 'Events could not be loaded.' }}</td>
         </tr>
       }
     </tbody>

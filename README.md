@@ -379,7 +379,7 @@ dotnet test                                    # all 152 backend tests; Docker m
 dotnet test IncidentMonitoring.Tests           # the 149 unit tests only, no Docker needed
 
 cd ../frontend
-npm test -- --watch=false                      # 14 Angular tests
+npm test -- --watch=false                      # 15 Angular tests
 ```
 
 **Unit tests (149):** PostgreSQL, Redis and SignalR are replaced by small in-memory fakes ([`Fakes.cs`](backend/IncidentMonitoring.Tests/Fakes.cs)).

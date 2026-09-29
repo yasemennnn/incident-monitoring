@@ -1,8 +1,9 @@
+import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { Subject, of } from 'rxjs';
 import { FakeRealtime, testEvent } from '../../../testing/fake-realtime';
-import { EventFilters } from '../../core/models/api.models';
+import { EventDto, EventFilters, PagedResult } from '../../core/models/api.models';
 import { ApiService } from '../../core/services/api.service';
 import { RealtimeService } from '../../core/services/realtime.service';
 import { EventsPage } from './events-page';
@@ -39,6 +40,36 @@ describe('EventsPage', () => {
     await new Promise((resolve) => setTimeout(resolve, 350)); // filter changes are debounced (300 ms)
 
     expect(api.getEvents).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, severity: 'CRITICAL' }));
+  });
+
+  it('shows loading only while the first request runs, not after it failed', async () => {
+    const response = new Subject<PagedResult<EventDto>>();
+    TestBed.configureTestingModule({
+      imports: [EventsPage],
+      providers: [
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            getEvents: vi.fn(() => response),
+            getFacets: vi.fn(() => of({ sources: [], services: [], severities: [], statuses: [] })),
+          },
+        },
+        { provide: RealtimeService, useValue: new FakeRealtime() },
+      ],
+    });
+    const fixture = TestBed.createComponent(EventsPage);
+    await fixture.whenStable();
+    const text = () => (fixture.nativeElement as HTMLElement).textContent ?? '';
+
+    expect(text()).toContain('Loading events…');
+
+    response.error(new HttpErrorResponse({ status: 503, error: { title: 'Database temporarily unavailable' } }));
+    await fixture.whenStable();
+
+    expect(text()).toContain('Database temporarily unavailable');
+    expect(text()).not.toContain('Loading events…');
+    expect(text()).toContain('Events could not be loaded.');
   });
 
   describe('during a steady stream of SignalR messages', () => {

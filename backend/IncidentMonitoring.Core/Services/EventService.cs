@@ -32,7 +32,8 @@ public class EventService(
 
     public Task<EventFacetsDto> GetFacetsAsync() => repository.GetFacetsAsync();
 
-    public async Task<EventDto> UpdateStatusAsync(string eventId, EventStatus newStatus)
+    /// <param name="expectedStatus">The status the client showed when the change was chosen; null if the client did not send one.</param>
+    public async Task<EventDto> UpdateStatusAsync(string eventId, EventStatus newStatus, EventStatus? expectedStatus = null)
     {
         var incidentEvent = await repository.GetAsync(eventId) ?? throw new NotFoundException($"Event '{eventId}' was not found.");
 
@@ -41,6 +42,12 @@ public class EventService(
             return EventDto.FromEntity(incidentEvent);
 
         var oldStatus = incidentEvent.Status;
+
+        // The client chose this change for a status the event no longer has: another request changed it since.
+        if (expectedStatus is { } shownStatus && shownStatus != oldStatus)
+            throw new InvalidStatusTransitionException(
+                $"The status was changed from {shownStatus} to {oldStatus} since it was loaded; the change to {newStatus} was not applied.");
+
         if (!StatusRules.CanChange(oldStatus, newStatus))
             throw new InvalidStatusTransitionException($"Cannot change status from {oldStatus} to {newStatus}.");
 

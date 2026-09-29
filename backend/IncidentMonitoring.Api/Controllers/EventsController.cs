@@ -41,7 +41,7 @@ public class EventsController(EventService eventService) : ControllerBase
     /// <remarks>
     /// Allowed changes: OPEN → ACKNOWLEDGED or RESOLVED, ACKNOWLEDGED → RESOLVED, RESOLVED → OPEN.
     /// Requesting the current status returns 200 and changes nothing. Any other change returns 409,
-    /// as does a change that lost to a concurrent status change.
+    /// as does a change that lost to a concurrent status change, or one whose expectedStatus is no longer the current status.
     /// </remarks>
     [HttpPut("{eventId}/status")]
     [ProducesResponseType<EventDto>(StatusCodes.Status200OK)]
@@ -49,5 +49,5 @@ public class EventsController(EventService eventService) : ControllerBase
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status404NotFound)]
     [ProducesResponseType<ProblemDetails>(StatusCodes.Status409Conflict)]
     public async Task<EventDto> UpdateStatus(string eventId, [FromBody] UpdateStatusRequest request) =>
-        await eventService.UpdateStatusAsync(eventId, request.Status!.Value);
+        await eventService.UpdateStatusAsync(eventId, request.Status!.Value, request.ExpectedStatus);
 }

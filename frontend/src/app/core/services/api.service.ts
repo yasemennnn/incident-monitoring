@@ -33,8 +33,9 @@ export class ApiService {
     return this.http.get<EventDto>(`${this.baseUrl}/events/${encodeURIComponent(eventId)}`);
   }
 
-  updateStatus(eventId: string, status: EventStatus): Observable<EventDto> {
-    return this.http.put<EventDto>(`${this.baseUrl}/events/${encodeURIComponent(eventId)}/status`, { status });
+  /** expectedStatus is the status the user saw: a change from any other status gets 409; asking for the current status still gets 200. */
+  updateStatus(eventId: string, status: EventStatus, expectedStatus: EventStatus): Observable<EventDto> {
+    return this.http.put<EventDto>(`${this.baseUrl}/events/${encodeURIComponent(eventId)}/status`, { status, expectedStatus });
   }
 
   getFacets(): Observable<EventFacets> {

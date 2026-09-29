@@ -290,7 +290,7 @@ Base URL `http://localhost:8080`. Full, interactive documentation is available i
 |---|---|---|---|
 | GET | `/api/events` | Event list. Filters: `severity`, `status`, `source`, `service`, `search`. Paging: `page`, `pageSize` (max 100). Newest first. | PostgreSQL |
 | GET | `/api/events/{eventId}` | One event | PostgreSQL |
-| PUT | `/api/events/{eventId}/status` | Change status, body `{"status":"RESOLVED"}` | PostgreSQL |
+| PUT | `/api/events/{eventId}/status` | Change status, body `{"status":"RESOLVED","expectedStatus":"OPEN"}` (`expectedStatus` optional) | PostgreSQL |
 | GET | `/api/events/recent?count=10` | Latest events (1-50), ordered by `timestamp` then `eventId`, newest first | PostgreSQL |
 | GET | `/api/events/facets` | Sources and services seen, plus all severities and statuses (for filter drop-downs) | PostgreSQL |
 | GET | `/api/dashboard/summary` | Totals, distributions, service statuses, `snapshotAt` | Redis |
@@ -315,6 +315,8 @@ A status update:
 3. pushes `eventUpdated` over SignalR
 
 If another request changed the status first, the losing request returns `200` when the event already has the requested status, and `409` otherwise. Only the request that changed the row requests a refresh and sends `eventUpdated`.
+
+`expectedStatus` is the status the client showed when the user chose the change. If the event has a different status now, the request returns `409` without changing anything, even when the change would be allowed from the new status. The dashboard always sends it. Requests without it are checked against the stored status only, as before. Requesting the status the event already has still returns `200`, whatever `expectedStatus` says.
 
 The change is committed to PostgreSQL first, then a projection refresh is requested. Redis is not part of that transaction: the projection worker updates it asynchronously and sends `summaryUpdated` after a successful write.
 
@@ -357,7 +359,7 @@ All errors are returned as ProblemDetails (`application/problem+json`):
 |---|---|
 | 400 | Invalid query parameter or request body, e.g. unknown severity, `pageSize` > 100, missing status. Produced by ASP.NET Core model validation. |
 | 404 | Event not found |
-| 409 | Status change not allowed, or lost to a concurrent change |
+| 409 | Status change not allowed, lost to a concurrent change, or `expectedStatus` is no longer the current status |
 | 503 | PostgreSQL temporarily unavailable, for the endpoints that use it; Redis unavailable, for the dashboard and services endpoints |
 | 500 | Unexpected error. No internal details are returned; the exception is logged. |
 
@@ -373,21 +375,21 @@ The backend uses built-in .NET logging with message templates, so values such as
 
 ```bash
 cd backend
-dotnet test                                    # all 147 backend tests; Docker must be running
-dotnet test IncidentMonitoring.Tests           # the 144 unit tests only, no Docker needed
+dotnet test                                    # all 152 backend tests; Docker must be running
+dotnet test IncidentMonitoring.Tests           # the 149 unit tests only, no Docker needed
 
 cd ../frontend
-npm test -- --watch=false                      # 9 Angular tests
+npm test -- --watch=false                      # 11 Angular tests
 ```
 
-**Unit tests (144):** PostgreSQL, Redis and SignalR are replaced by small in-memory fakes ([`Fakes.cs`](backend/IncidentMonitoring.Tests/Fakes.cs)).
+**Unit tests (149):** PostgreSQL, Redis and SignalR are replaced by small in-memory fakes ([`Fakes.cs`](backend/IncidentMonitoring.Tests/Fakes.cs)).
 
 | Test class | What it covers |
 |---|---|
 | `EventValidatorTests` | Required fields, lengths, eventId characters, severity and status values, strict ISO-8601 timestamps with a time zone, future-timestamp limit |
 | `EventComparisonTests` | Which fields decide duplicate vs conflict; status, `ReceivedAt` and `StatusUpdatedAt` are ignored; microsecond precision |
 | `EventProcessorTests` | A valid event is stored, a refresh is requested and `eventReceived` is sent once. Invalid, duplicate, conflict and status-different messages change nothing and send nothing. A database error is thrown to the consumer. |
-| `EventServiceTests` | Status updates: winner, same-status no-op, 404, invalid transition, and lost concurrent updates. Recent events ordering. |
+| `EventServiceTests` | Status updates: winner, same-status no-op, 404, invalid transition, lost concurrent updates, and `expectedStatus` (matching, stale, missing, stale with the target already stored). Recent events ordering. |
 | `RulesTests` | Allowed and forbidden status changes, service health rule |
 | `DashboardProjectionTests` | Dashboard numbers built from a PostgreSQL snapshot (open, unresolved critical, per-service counts, latest event) |
 | `DashboardServiceTests` | Summary read from Redis, and the summary built from a new projection |

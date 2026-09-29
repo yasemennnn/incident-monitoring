@@ -128,6 +128,74 @@ public class EventServiceTests
     }
 
     [Fact]
+    public async Task Matching_expected_status_updates_as_usual()
+    {
+        var result = await CreateService().UpdateStatusAsync("EVT-1", EventStatus.RESOLVED, EventStatus.OPEN);
+
+        Assert.Equal(("EVT-1", EventStatus.OPEN, EventStatus.RESOLVED, NowInMicroseconds), Assert.Single(_repository.StatusUpdates));
+        Assert.Equal(EventStatus.RESOLVED, result.Status);
+        Assert.Equal(1, _refresher.Requests);
+        Assert.Equal(EventStatus.RESOLVED, Assert.Single(_notifier.Updated).Status);
+    }
+
+    [Fact]
+    public async Task Stale_expected_status_is_a_conflict_even_if_the_change_is_allowed_from_the_stored_status()
+    {
+        // The client showed OPEN; another request acknowledged the event since. ACKNOWLEDGED -> RESOLVED is allowed,
+        // but the user chose RESOLVED without knowing about the acknowledgement.
+        _repository.Events["EVT-1"].Status = EventStatus.ACKNOWLEDGED;
+
+        var error = await Assert.ThrowsAsync<InvalidStatusTransitionException>(() =>
+            CreateService().UpdateStatusAsync("EVT-1", EventStatus.RESOLVED, EventStatus.OPEN));
+
+        Assert.Contains("since it was loaded", error.Message);
+        Assert.Empty(_repository.StatusUpdates);
+        Assert.Equal(EventStatus.ACKNOWLEDGED, _repository.Events["EVT-1"].Status);
+        Assert.Equal(EarlierUpdate, _repository.Events["EVT-1"].StatusUpdatedAt);
+        AssertNoSideEffects();
+    }
+
+    [Fact]
+    public async Task Without_an_expected_status_the_change_is_checked_against_the_stored_status_only()
+    {
+        // Clients that do not send expectedStatus keep the previous behaviour.
+        _repository.Events["EVT-1"].Status = EventStatus.ACKNOWLEDGED;
+
+        var result = await CreateService().UpdateStatusAsync("EVT-1", EventStatus.RESOLVED);
+
+        Assert.Equal(("EVT-1", EventStatus.ACKNOWLEDGED, EventStatus.RESOLVED, NowInMicroseconds), Assert.Single(_repository.StatusUpdates));
+        Assert.Equal(EventStatus.RESOLVED, result.Status);
+    }
+
+    [Fact]
+    public async Task Stale_expected_status_for_the_status_already_stored_returns_the_event_and_changes_nothing()
+    {
+        // The client showed OPEN and chose ACKNOWLEDGED; another request already acknowledged the event.
+        _repository.Events["EVT-1"].Status = EventStatus.ACKNOWLEDGED;
+
+        var result = await CreateService().UpdateStatusAsync("EVT-1", EventStatus.ACKNOWLEDGED, EventStatus.OPEN);
+
+        Assert.Equal(EventStatus.ACKNOWLEDGED, result.Status);
+        Assert.Equal(EarlierUpdate, result.StatusUpdatedAt);
+        Assert.Empty(_repository.StatusUpdates);
+        AssertNoSideEffects();
+    }
+
+    [Fact]
+    public async Task Lost_update_with_a_matching_expected_status_is_still_a_conflict()
+    {
+        // The expected status matched when read; another request acknowledged the event before the conditional update.
+        _repository.BeforeStatusUpdate = () => _repository.Events["EVT-1"].Status = EventStatus.ACKNOWLEDGED;
+
+        var error = await Assert.ThrowsAsync<InvalidStatusTransitionException>(() =>
+            CreateService().UpdateStatusAsync("EVT-1", EventStatus.RESOLVED, EventStatus.OPEN));
+
+        Assert.Contains("concurrently", error.Message);
+        Assert.Equal(EventStatus.ACKNOWLEDGED, _repository.Events["EVT-1"].Status);
+        AssertNoSideEffects();
+    }
+
+    [Fact]
     public async Task Recent_events_are_newest_first_by_event_time_then_event_id()
     {
         var t = new DateTime(2026, 9, 28, 10, 0, 0, DateTimeKind.Utc);

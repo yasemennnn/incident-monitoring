@@ -53,7 +53,8 @@ export class EventDetailPage implements OnInit {
     this.actionError.set(null);
     this.actionMessage.set(null);
 
-    this.api.updateStatus(this.id(), status).subscribe({
+    // The status on screen: the buttons exist only while an event is shown.
+    this.api.updateStatus(this.id(), status, this.event()!.status).subscribe({
       next: (updated) => {
         this.event.set(updated);
         this.actionMessage.set(`Status is now ${updated.status}.`);

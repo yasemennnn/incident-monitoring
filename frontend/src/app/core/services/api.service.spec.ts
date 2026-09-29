@@ -26,12 +26,12 @@ describe('ApiService', () => {
     request.flush({ items: [], page: 2, pageSize: 20, totalCount: 0 });
   });
 
-  it('updates the status with a PUT and an encoded event id', () => {
-    api.updateStatus('EVT 1', 'RESOLVED').subscribe();
+  it('updates the status with a PUT, an encoded event id and the expected status', () => {
+    api.updateStatus('EVT 1', 'RESOLVED', 'OPEN').subscribe();
 
     const request = http.expectOne('http://localhost:8080/api/events/EVT%201/status');
     expect(request.request.method).toBe('PUT');
-    expect(request.request.body).toEqual({ status: 'RESOLVED' });
+    expect(request.request.body).toEqual({ status: 'RESOLVED', expectedStatus: 'OPEN' });
     request.flush({});
   });
 });

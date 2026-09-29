@@ -54,6 +54,9 @@ public class UpdateStatusRequest
     /// <summary>New status: OPEN, ACKNOWLEDGED or RESOLVED.</summary>
     [Required]
     public EventStatus? Status { get; set; }
+
+    /// <summary>Optional: the status the client showed when the change was chosen. If the event has a different status now, the change returns 409.</summary>
+    public EventStatus? ExpectedStatus { get; set; }
 }
 
 /// <summary>Distinct values that can be used to fill filter drop-downs.</summary>

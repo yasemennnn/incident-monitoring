@@ -255,8 +255,10 @@ Unknown id → `404`:
 Request body:
 
 ```json
-{ "status": "RESOLVED" }
+{ "status": "RESOLVED", "expectedStatus": "OPEN" }
 ```
+
+`expectedStatus` is optional: the status shown to the user when they chose the change. If the event has another status by then, the change is not applied and `409` is returned. Requesting the status the event already has still returns `200`. Without `expectedStatus`, the change is checked against the stored status only.
 
 `200` response, the updated event:
 
@@ -287,6 +289,7 @@ Other responses:
 | Status | When | Example |
 |---|---|---|
 | `409` | Change not allowed | `{ "title": "Invalid status change", "status": 409, "detail": "Cannot change status from RESOLVED to ACKNOWLEDGED.", "instance": "/api/events/EVT-5C8A751E2D9B4A3FB6E1C0D8F7A5E239/status" }` |
+| `409` | `expectedStatus` is out of date | `{ "title": "Invalid status change", "status": 409, "detail": "The status was changed from OPEN to ACKNOWLEDGED since it was loaded; the change to RESOLVED was not applied.", "instance": "/api/events/EVT-5C8A751E2D9B4A3FB6E1C0D8F7A5E239/status" }` |
 | `404` | Unknown event | same shape as above |
 | `400` | Missing or unknown status value | `{ "title": "One or more validation errors occurred.", "status": 400, "errors": { "Status": ["The Status field is required."] } }` |
 
